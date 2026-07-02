@@ -11,4 +11,11 @@ public class VelixException : Exception
         StatusCode = statusCode;
         ErrorCode = errorCode;
     }
+
+    public VelixException(string message, int statusCode, string? errorCode, Exception innerException)
+        : base(message, innerException)
+    {
+        StatusCode = statusCode;
+        ErrorCode = errorCode;
+    }
 }

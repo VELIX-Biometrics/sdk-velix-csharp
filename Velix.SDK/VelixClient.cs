@@ -56,34 +56,34 @@ public class VelixClient : IDisposable
 
     internal async Task<T> GetAsync<T>(string path, CancellationToken ct = default)
     {
-        var response = await _http.GetAsync(path, ct);
+        using var response = await _http.GetAsync(path, ct);
         return await ReadResponse<T>(response, ct);
     }
 
     internal async Task<T> PostAsync<T>(string path, object body, CancellationToken ct = default)
     {
         var content = JsonContent.Create(body, options: JsonOptions);
-        var response = await _http.PostAsync(path, content, ct);
+        using var response = await _http.PostAsync(path, content, ct);
         return await ReadResponse<T>(response, ct);
     }
 
     internal async Task<T> PutAsync<T>(string path, object body, CancellationToken ct = default)
     {
         var content = JsonContent.Create(body, options: JsonOptions);
-        var response = await _http.PutAsync(path, content, ct);
+        using var response = await _http.PutAsync(path, content, ct);
         return await ReadResponse<T>(response, ct);
     }
 
     internal async Task<T> PatchAsync<T>(string path, object body, CancellationToken ct = default)
     {
         var content = JsonContent.Create(body, options: JsonOptions);
-        var response = await _http.PatchAsync(path, content, ct);
+        using var response = await _http.PatchAsync(path, content, ct);
         return await ReadResponse<T>(response, ct);
     }
 
     internal async Task DeleteAsync(string path, CancellationToken ct = default)
     {
-        var response = await _http.DeleteAsync(path, ct);
+        using var response = await _http.DeleteAsync(path, ct);
         await EnsureSuccess(response, ct);
     }
 
@@ -105,6 +105,7 @@ public class VelixClient : IDisposable
         var body = await response.Content.ReadAsStringAsync(ct);
         string? message = null;
         string? code = null;
+        Exception? parseError = null;
 
         try
         {
@@ -112,7 +113,12 @@ public class VelixClient : IDisposable
             if (doc.RootElement.TryGetProperty("message", out var m)) message = m.GetString();
             if (doc.RootElement.TryGetProperty("error", out var e)) code = e.GetString();
         }
-        catch { /* ignore parse errors */ }
+        catch (JsonException ex)
+        {
+            // Body isn't valid JSON (e.g. plain text or HTML error page from a proxy).
+            // Preserve the original exception instead of silently swallowing it.
+            parseError = ex;
+        }
 
         if (response.StatusCode == HttpStatusCode.TooManyRequests)
         {
@@ -123,10 +129,17 @@ public class VelixClient : IDisposable
             throw new RateLimitException(retryAfter);
         }
 
-        throw new VelixException(
-            message ?? $"Request failed with status {(int)response.StatusCode}",
-            (int)response.StatusCode,
-            code);
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            throw new AuthException(
+                message ?? "Authentication failed",
+                code);
+        }
+
+        var errorMessage = message ?? $"Request failed with status {(int)response.StatusCode}";
+        throw parseError is null
+            ? new VelixException(errorMessage, (int)response.StatusCode, code)
+            : new VelixException(errorMessage, (int)response.StatusCode, code, parseError);
     }
 
     public void Dispose() => _http.Dispose();
