@@ -3,6 +3,7 @@ using WireMock.RequestBuilders;
 using WireMock.ResponseBuilders;
 using WireMock.Server;
 using Velix.SDK;
+using Velix.SDK.Models;
 using Xunit;
 
 namespace Velix.SDK.Tests;
@@ -23,39 +24,63 @@ public class CheckinModuleTests : IDisposable
     }
 
     [Fact]
-    public async Task FacialAsync_Granted_ReturnsPassed()
+    public async Task IdentifyAsync_Matched_ReturnsPersonId()
     {
         _server.Given(
-            Request.Create().WithPath("/v1/checkin/acme/identify").UsingPost()
+            Request.Create().WithPath("/v1/api/checkin/identify").UsingPost()
         ).RespondWith(
             Response.Create()
                 .WithStatusCode(HttpStatusCode.OK)
                 .WithHeader("Content-Type", "application/json")
-                .WithBody("""{"data":{"passed":true,"person_id":"uuid-123","person_name":"João","request_id":"req-1"}}""")
+                .WithBody("""{"data":{"matched":true,"person_id":"uuid-123","quality_score":0.94,"message":"ok"}}""")
         );
 
-        var result = await _client.Checkin.FacialAsync("acme", "base64frame==");
+        var result = await _client.Checkin.IdentifyAsync(new CheckinIdentifyRequest
+        {
+            ImageBase64 = "base64frame==",
+        });
 
-        Assert.True(result.Passed);
+        Assert.True(result.Matched);
         Assert.Equal("uuid-123", result.PersonId);
     }
 
     [Fact]
-    public async Task FacialAsync_Denied_ReturnsFailed()
+    public async Task IdentifyAsync_NotMatched_ReturnsNullPerson()
     {
         _server.Given(
-            Request.Create().WithPath("/v1/checkin/acme/identify").UsingPost()
+            Request.Create().WithPath("/v1/api/checkin/identify").UsingPost()
         ).RespondWith(
             Response.Create()
                 .WithStatusCode(HttpStatusCode.OK)
                 .WithHeader("Content-Type", "application/json")
-                .WithBody("""{"data":{"passed":false,"person_id":null,"request_id":"req-2"}}""")
+                .WithBody("""{"data":{"matched":false,"person_id":null,"message":"not found"}}""")
         );
 
-        var result = await _client.Checkin.FacialAsync("acme", "base64frame==");
+        var result = await _client.Checkin.IdentifyAsync(new CheckinIdentifyRequest
+        {
+            ImageBase64 = "base64frame==",
+        });
 
-        Assert.False(result.Passed);
+        Assert.False(result.Matched);
         Assert.Null(result.PersonId);
+    }
+
+    [Fact]
+    public async Task IdentifyAsync_SendsApiKeyHeader()
+    {
+        _server.Given(
+            Request.Create().WithPath("/v1/api/checkin/identify").UsingPost()
+        ).RespondWith(
+            Response.Create()
+                .WithStatusCode(HttpStatusCode.OK)
+                .WithHeader("Content-Type", "application/json")
+                .WithBody("""{"data":{"matched":true,"person_id":"uuid-123"}}""")
+        );
+
+        await _client.Checkin.IdentifyAsync(new CheckinIdentifyRequest { ImageBase64 = "x" });
+
+        var logEntry = _server.LogEntries.Last();
+        Assert.Equal("test-key", logEntry.RequestMessage.Headers!["x-api-key"].First());
     }
 
     public void Dispose()

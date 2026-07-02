@@ -30,8 +30,11 @@ var client = new VelixClient(new VelixClientOptions
     ApiKey = Environment.GetEnvironmentVariable("VELIX_API_KEY")!,
 });
 
-var result = await client.Checkin.FacialAsync("tenant-slug", frameBase64);
-Console.WriteLine(result.Passed ? "GRANTED" : "DENIED");
+var identify = await client.Checkin.IdentifyAsync(new CheckinIdentifyRequest
+{
+    ImageBase64 = frameBase64,
+});
+Console.WriteLine(identify.Matched ? "GRANTED" : "DENIED");
 ```
 
 ## Environment Variables
@@ -39,76 +42,79 @@ Console.WriteLine(result.Passed ? "GRANTED" : "DENIED");
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `VELIX_API_URL` | Yes | API base URL (`https://api.velixbiometrics.com`) |
-| `VELIX_API_KEY` | Yes | Tenant API key (`vx_live_...` or `vx_sandbox_...`) |
+| `VELIX_API_KEY` | Yes | API key (`vlx_...`), sent as `x-api-key` (or `Authorization: Bearer vlx_...`) |
 
 ## Modules
 
-| Module | Methods |
-|--------|---------|
-| `client.Checkin` | `FacialAsync()`, `QrAsync()`, `PinAsync()`, `GetHistoryAsync()` |
-| `client.Persons` | `ListAsync()`, `GetAsync()`, `CreateAsync()`, `UpdateAsync()`, `DeleteAsync()`, `EnrollAsync()` |
-| `client.Events` | `ListAsync()`, `GetAsync()`, `CreateAsync()`, `ConfigureAsync()` |
-| `client.Tenants` | `GetMeAsync()`, `UpdateSettingsAsync()` |
+Real surface only — 6 endpoints under `/v1/api/*`, protected by API key
+(`x-api-key`). See `code/lib/lib-velix-contracts/openapi/public-api.yaml`
+(task #593) for the authoritative contract.
+
+| Module | Methods | Scope required |
+|--------|---------|-----------------|
+| `client.Onboarding` | `EnrollAsync()` | `onboarding:write` |
+| `client.Checkin` | `IdentifyAsync()` | `checkin:write` |
+| `client.Lgpd` | `RequestDeletionAsync()` | `lgpd:write` |
+| `client.Me` | `GetAsync()` | `me:read` |
+| `client.Events` | `CreateGuestAsync()`, `GetGuestAsync()` | `events:write` / `events:read` |
+
+**Velix Time has no API-key surface yet** — there is no `client.Time` module
+and none should be added until the server side exposes one (see the "Velix
+Time" note in the spec file above).
+
+## Onboarding Module
+
+```csharp
+var result = await client.Onboarding.EnrollAsync(new OnboardingRequest
+{
+    Name = "João Silva",
+    Email = "joao@company.com",
+    ExternalId = "EMP-001",
+    Frames = new[] { frame1, frame2, frame3 },
+});
+// result.PersonId, result.Enrolled, result.FramesProcessed
+```
 
 ## Checkin Module
 
 ```csharp
-// Facial identification (base64 JPEG frame)
-var result = await client.Checkin.FacialAsync("tenant-slug", frameBase64);
-// result.Passed == true
-// result.PersonId == "uuid"
-// result.PersonName == "João Silva"
-
-// QR code checkin
-var result = await client.Checkin.QrAsync("tenant-slug", qrToken);
-
-// PIN checkin
-var result = await client.Checkin.PinAsync("tenant-slug", pin);
-
-// Paginated history
-var history = await client.Checkin.GetHistoryAsync("tenant-slug", page: 1, pageSize: 20);
+var identify = await client.Checkin.IdentifyAsync(new CheckinIdentifyRequest
+{
+    ImageBase64 = frameBase64,
+    Liveness = new LivenessBlock
+    {
+        Token = challengeToken,
+        Samples = new[] { new LivenessSample { Action = "center", ImageBase64 = sampleBase64 } },
+    },
+});
+// identify.Matched, identify.PersonId
+// NOTE: no liveness score is ever returned by this API — never surface one.
 ```
 
-## Persons Module
+## LGPD Module
 
 ```csharp
-// List with optional search
-var list = await client.Persons.ListAsync(page: 1, pageSize: 20, search: "João");
+var deletion = await client.Lgpd.RequestDeletionAsync(personId);
+// deletion.ProtocolNumber
+```
 
-// Get by ID
-var person = await client.Persons.GetAsync("uuid");
+## Me Module
 
-// Create
-var created = await client.Persons.CreateAsync(new CreatePersonRequest(
-    Name: "João Silva",
-    Email: "joao@company.com",
-    ExternalId: "EMP-001"
-));
-
-// Update
-await client.Persons.UpdateAsync("uuid", new UpdatePersonRequest(Name: "João B. Silva"));
-
-// Enroll biometrics (minimum 3 base64 frames)
-await client.Persons.EnrollAsync("uuid", new[] { frame1, frame2, frame3 });
-
-// Delete
-await client.Persons.DeleteAsync("uuid");
+```csharp
+var me = await client.Me.GetAsync(personId);
+// me.Name, me.Email, me.PhotoUrl
 ```
 
 ## Events Module
 
 ```csharp
-var list    = await client.Events.ListAsync(page: 1, pageSize: 20);
-var ev      = await client.Events.GetAsync("uuid");
-var created = await client.Events.CreateAsync(new CreateEventRequest(Name: "Conference 2026"));
-await client.Events.ConfigureAsync("uuid", new EventConfig(CheckInOpen: true));
-```
+var guest = await client.Events.CreateGuestAsync(eventId, new CreateGuestRequest
+{
+    Name = "Maria Souza",
+    Email = "maria@company.com",
+});
 
-## Tenants Module
-
-```csharp
-var tenant = await client.Tenants.GetMeAsync();
-await client.Tenants.UpdateSettingsAsync(new TenantSettings(RequireLiveness: true));
+var status = await client.Events.GetGuestAsync(eventId, guest.Id!);
 ```
 
 ## Dependency Injection (ASP.NET Core)
@@ -127,8 +133,8 @@ public class AccessController(VelixClient velix) : ControllerBase
     [HttpPost("checkin")]
     public async Task<IActionResult> Checkin([FromBody] string frame)
     {
-        var result = await velix.Checkin.FacialAsync("tenant-slug", frame);
-        return Ok(new { result.Passed });
+        var result = await velix.Checkin.IdentifyAsync(new CheckinIdentifyRequest { ImageBase64 = frame });
+        return Ok(new { result.Matched });
     }
 }
 ```
@@ -140,12 +146,26 @@ using Velix.SDK.Exceptions;
 
 try
 {
-    var result = await client.Checkin.FacialAsync("slug", frame);
+    var result = await client.Checkin.IdentifyAsync(new CheckinIdentifyRequest { ImageBase64 = frame });
 }
 catch (AuthException)          { Console.Error.WriteLine("Invalid API key"); }
-catch (BiometricException e)   { Console.Error.WriteLine($"Biometric: {e.Message}"); }
-catch (RateLimitException e)   { Console.Error.WriteLine($"Rate limit — retry after {e.RetryAfter}ms"); }
+catch (RateLimitException e)   { Console.Error.WriteLine($"Rate limit — retry after {e.RetryAfterSeconds}s"); }
 catch (VelixException e)       { Console.Error.WriteLine($"HTTP {e.StatusCode}: {e.Message}"); }
+```
+
+## HTTP Timeout
+
+Default client timeout is **30000ms (30s)**, per the SDK contract notes in
+the spec (checkin payloads with liveness samples can be 6-12MB). Override
+via `VelixClientOptions.Timeout`:
+
+```csharp
+var client = new VelixClient(new VelixClientOptions
+{
+    ApiUrl = "...",
+    ApiKey = "...",
+    Timeout = TimeSpan.FromSeconds(45),
+});
 ```
 
 ## Running Tests

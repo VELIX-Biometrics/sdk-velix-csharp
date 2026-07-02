@@ -13,16 +13,32 @@ public class VelixClient : IDisposable
 {
     private readonly HttpClient _http;
     private readonly VelixClientOptions _options;
+
+    /// <summary>
+    /// No global naming policy: wire casing is mixed (snake_case for most
+    /// /v1/api/* payloads, camelCase for checkin/events) per
+    /// lib-velix-contracts/openapi/public-api.yaml. Every model maps its
+    /// own wire name explicitly via [JsonPropertyName].
+    /// </summary>
     internal static readonly JsonSerializerOptions JsonOptions = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
+    /// <summary>POST /v1/api/onboarding (Velix.ID).</summary>
+    public OnboardingModule Onboarding { get; }
+
+    /// <summary>POST /v1/api/checkin/identify (Velix.ID).</summary>
     public CheckinModule Checkin { get; }
-    public PersonsModule Persons { get; }
+
+    /// <summary>POST /v1/api/deletion-request (Velix.ID, LGPD).</summary>
+    public LgpdModule Lgpd { get; }
+
+    /// <summary>GET /v1/api/me/{personId} (Velix.ID).</summary>
+    public MeModule Me { get; }
+
+    /// <summary>POST/GET /v1/api/events/{id}/guests (Velix Events).</summary>
     public EventsModule Events { get; }
-    public TenantsModule Tenants { get; }
 
     public VelixClient(VelixClientOptions options)
     {
@@ -48,10 +64,11 @@ public class VelixClient : IDisposable
         _http.DefaultRequestHeaders.UserAgent.Add(
             new ProductInfoHeaderValue("velix-csharp-sdk", "1.0.0"));
 
+        Onboarding = new OnboardingModule(this);
         Checkin = new CheckinModule(this);
-        Persons = new PersonsModule(this);
+        Lgpd = new LgpdModule(this);
+        Me = new MeModule(this);
         Events = new EventsModule(this);
-        Tenants = new TenantsModule(this);
     }
 
     internal async Task<T> GetAsync<T>(string path, CancellationToken ct = default)
@@ -110,8 +127,20 @@ public class VelixClient : IDisposable
         try
         {
             using var doc = JsonDocument.Parse(body);
-            if (doc.RootElement.TryGetProperty("message", out var m)) message = m.GetString();
-            if (doc.RootElement.TryGetProperty("error", out var e)) code = e.GetString();
+            // ApiError shape: { error: { message, code, statusCode } }
+            if (doc.RootElement.TryGetProperty("error", out var errorObj) &&
+                errorObj.ValueKind == JsonValueKind.Object)
+            {
+                if (errorObj.TryGetProperty("message", out var m)) message = m.GetString();
+                if (errorObj.TryGetProperty("code", out var c)) code = c.GetString();
+            }
+            else if (doc.RootElement.TryGetProperty("message", out var topLevelMessage))
+            {
+                // Fallback for non-conformant error bodies (e.g. plain { message, code }).
+                message = topLevelMessage.GetString();
+                if (doc.RootElement.TryGetProperty("code", out var topLevelCode))
+                    code = topLevelCode.GetString();
+            }
         }
         catch (JsonException ex)
         {

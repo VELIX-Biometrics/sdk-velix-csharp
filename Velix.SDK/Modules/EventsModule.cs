@@ -2,19 +2,24 @@ using Velix.SDK.Models;
 
 namespace Velix.SDK.Modules;
 
+/// <summary>
+/// Velix Events guest endpoints under /v1/api/events/{id}/guests. This is
+/// the minimal API-key surface for Events — create + read a single guest.
+/// There is no list/update/delete of events or guests in this API.
+/// </summary>
 public class EventsModule(VelixClient client)
 {
-    public Task<PagedResult<VelixEvent>> ListAsync(
-        int page = 1, int pageSize = 20,
+    /// <summary>POST /v1/api/events/{id}/guests — scope events:write.</summary>
+    public Task<GuestResponse> CreateGuestAsync(
+        string eventId,
+        CreateGuestRequest request,
         CancellationToken ct = default) =>
-        client.GetAsync<PagedResult<VelixEvent>>($"v1/events?page={page}&pageSize={pageSize}", ct);
+        client.PostAsync<GuestResponse>($"v1/api/events/{eventId}/guests", request, ct);
 
-    public Task<VelixEvent> GetAsync(string id, CancellationToken ct = default) =>
-        client.GetAsync<VelixEvent>($"v1/events/{id}", ct);
-
-    public Task<VelixEvent> CreateAsync(CreateEventRequest request, CancellationToken ct = default) =>
-        client.PostAsync<VelixEvent>("v1/events", request, ct);
-
-    public Task<VelixEvent> UpdateConfigAsync(string id, object config, CancellationToken ct = default) =>
-        client.PatchAsync<VelixEvent>($"v1/events/{id}/config", config, ct);
+    /// <summary>GET /v1/api/events/{id}/guests/{guestId} — scope events:read.</summary>
+    public Task<GuestResponse> GetGuestAsync(
+        string eventId,
+        string guestId,
+        CancellationToken ct = default) =>
+        client.GetAsync<GuestResponse>($"v1/api/events/{eventId}/guests/{guestId}", ct);
 }
