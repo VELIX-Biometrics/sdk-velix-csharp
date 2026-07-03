@@ -1,0 +1,12 @@
+/sdk/sdk-velix-csharp/Velix.SDK/bin/Debug/net8.0/Velix.SDK.deps.json
+/sdk/sdk-velix-csharp/Velix.SDK/bin/Debug/net8.0/Velix.SDK.dll
+/sdk/sdk-velix-csharp/Velix.SDK/bin/Debug/net8.0/Velix.SDK.pdb
+/sdk/sdk-velix-csharp/Velix.SDK/obj/Debug/net8.0/Velix.SDK.csproj.AssemblyReference.cache
+/sdk/sdk-velix-csharp/Velix.SDK/obj/Debug/net8.0/Velix.SDK.GeneratedMSBuildEditorConfig.editorconfig
+/sdk/sdk-velix-csharp/Velix.SDK/obj/Debug/net8.0/Velix.SDK.AssemblyInfoInputs.cache
+/sdk/sdk-velix-csharp/Velix.SDK/obj/Debug/net8.0/Velix.SDK.AssemblyInfo.cs
+/sdk/sdk-velix-csharp/Velix.SDK/obj/Debug/net8.0/Velix.SDK.csproj.CoreCompileInputs.cache
+/sdk/sdk-velix-csharp/Velix.SDK/obj/Debug/net8.0/Velix.SDK.dll
+/sdk/sdk-velix-csharp/Velix.SDK/obj/Debug/net8.0/refint/Velix.SDK.dll
+/sdk/sdk-velix-csharp/Velix.SDK/obj/Debug/net8.0/Velix.SDK.pdb
+/sdk/sdk-velix-csharp/Velix.SDK/obj/Debug/net8.0/ref/Velix.SDK.dll
