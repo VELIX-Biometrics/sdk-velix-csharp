@@ -1,2 +1,5 @@
 bin/
 obj/
+
+# Claude Code (config local / worktrees de agente — nunca versionar)
+.claude/
