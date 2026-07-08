@@ -42,6 +42,21 @@ public class VelixClient : IDisposable
     /// <summary>POST/GET /v1/api/events/{id}/guests (Velix Events).</summary>
     public EventsModule Events { get; }
 
+    /// <summary>/v1/contexts/* — Identity Context (BearerAuth).</summary>
+    public ContextModule Contexts { get; }
+
+    /// <summary>/v1/contexts/{id}/memberships, /v1/identities/{id}/memberships, /v1/memberships/*.</summary>
+    public ContextMembershipModule Memberships { get; }
+
+    /// <summary>/v1/context-roles*.</summary>
+    public ContextRoleModule ContextRoles { get; }
+
+    /// <summary>/v1/context-permissions.</summary>
+    public ContextPermissionModule ContextPermissions { get; }
+
+    /// <summary>POST /v1/authorization-tokens/validate.</summary>
+    public AuthorizationTokenModule AuthorizationTokens { get; }
+
     public VelixClient(VelixClientOptions options)
     {
         _options = options;
@@ -71,6 +86,11 @@ public class VelixClient : IDisposable
         Lgpd = new LgpdModule(this);
         Me = new MeModule(this);
         Events = new EventsModule(this);
+        Contexts = new ContextModule(this);
+        Memberships = new ContextMembershipModule(this);
+        ContextRoles = new ContextRoleModule(this);
+        ContextPermissions = new ContextPermissionModule(this);
+        AuthorizationTokens = new AuthorizationTokenModule(this);
     }
 
     internal async Task<T> GetAsync<T>(string path, CancellationToken ct = default)

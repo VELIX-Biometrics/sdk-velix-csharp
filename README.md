@@ -62,6 +62,25 @@ Real surface only — 6 endpoints under `/v1/api/*`, protected by API key
 and none should be added until the server side exposes one (see the "Velix
 Time" note in the spec file above).
 
+| `client.Contexts` | `CreateAsync/GetAsync/ListAsync/UpdateAsync/RemoveAsync`, `AuthorizeAsync`, `ListAuthorizationDecisionsAsync`, `CreateLinkRequestAsync` | BearerAuth |
+| `client.Memberships` | `CreateAsync`, `ListByContextAsync`, `ListByIdentityAsync`, `UpdateStatusAsync`, `AddRolesAsync`, `RemoveRolesAsync` | BearerAuth |
+| `client.ContextRoles` | `CreateAsync`, `ListAsync`, `LinkPermissionsAsync` | BearerAuth |
+| `client.ContextPermissions` | `CreateAsync`, `ListAsync` | BearerAuth |
+| `client.AuthorizationTokens` | `ValidateAsync` | BearerAuth |
+
+## Identity Context
+
+```csharp
+var context = await client.Contexts.CreateAsync(new { name = "Matriz SP", contextType = "location" });
+var decision = await client.Contexts.AuthorizeAsync(contextId, new { identityId, permission = "access:enter" });
+var membership = await client.Memberships.CreateAsync(contextId, new { identityId, roleIds = new[] { roleId } });
+// context exit (definitive, no grace period)
+await client.Memberships.UpdateStatusAsync(membershipId, "revoked");
+// cross-tenant link — stays PENDING until the person consents via magic link
+await client.Contexts.CreateLinkRequestAsync(contextId, new { identityId });
+await client.AuthorizationTokens.ValidateAsync("vat_...");
+```
+
 ## Onboarding Module
 
 ```csharp
